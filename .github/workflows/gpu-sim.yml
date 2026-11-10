@@ -63,13 +63,23 @@ jobs:
 
       # The device tests exit 77 when no device is found, which ctest reports
       # as skipped. Here a skip means the simulated GPU was not seen, so it
-      # is treated as a failure.
+      # is treated as a failure. The suite count is not hardcoded: the number
+      # of test cases ctest wrote to the JUnit file must equal the number
+      # registered (ctest -N). ctest writes a relative --output-junit path
+      # into the build directory.
       - name: Test
         shell: bash
         run: |
-          vgpu run ctest --test-dir build --output-on-failure --no-tests=error | tee ctest.log
-          if grep -qiE "skipped|did not run" ctest.log; then
+          set -euo pipefail
+          vgpu run ctest --test-dir build --output-junit ctest.xml --output-on-failure --no-tests=error | tee ctest.log
+          if grep -qiE '\bskipped\b|did not run' ctest.log; then
             echo "::error::some tests were skipped (no CUDA device found?)"
             exit 1
           fi
-          grep -q "100% tests passed, 0 tests failed out of 8" ctest.log
+          registered=$(ctest --test-dir build -N | grep -cE 'Test +#[0-9]+:')
+          ran=$(grep -c '<testcase ' build/ctest.xml)
+          if [ "$registered" -eq 0 ] || [ "$ran" -ne "$registered" ]; then
+            echo "::error::ran $ran of $registered registered suites"
+            exit 1
+          fi
+          echo "ran $ran of $registered registered suites, none skipped"
