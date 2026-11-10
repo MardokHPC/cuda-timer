@@ -2,12 +2,10 @@
 
 // Device-side helpers for the CUDA test suites.
 //
-// GoogleTest is never included from a CUDA translation unit. nvcc's device
-// pass cannot parse gtest's portability layer on a glibc host: the POSIX
-// declarations it relies on (`rmdir`, `isatty`, `chdir`, `read`, `write`,
-// `close`, `struct stat`) are not visible there, and the build dies inside
-// gtest-port.h with "identifier is undefined" / "incomplete class type". The
-// suites are therefore plain host C++ (.cpp) and only the kernels live here,
+// GoogleTest is never included from a CUDA translation unit: nvcc's device
+// pass cannot parse gtest's portability layer, which needs POSIX declarations
+// (rmdir, isatty, struct stat) that are invisible there, and the build dies
+// inside gtest-port.h. The suites are host .cpp files; only kernels live here,
 // behind host-callable launchers.
 
 #include <cuda_runtime.h>

@@ -13,24 +13,13 @@
 namespace cuda_timer {
 
 /**
- * @brief Thread-safe CSV logger compliant with RFC 4180.
+ * @brief Thread-safe RFC 4180 CSV writer for TimingRecord rows.
  *
- * Writes timing records as CSV rows with RFC 4180 escaping (comma, double
- * quote, CR and LF). Numbers are always written with the classic "C" locale,
- * so a decimal comma coming from the host program's global locale can never
- * split a value across columns.
+ * The stream keeps the classic locale for its whole lifetime, so a decimal
+ * comma in the program's global locale cannot split a value across columns.
  *
- * The file is opened with `std::ios::trunc` by default: previous content is
- * discarded. Pass `std::ios::app` to append to an existing file; the header
- * is then written only when the file is new or empty.
- *
- * Example:
- * @code
- * cuda_timer::CsvLogger logger("timings.csv");                    // truncate
- * cuda_timer::CsvLogger appender("timings.csv", std::ios::app);   // append
- * logger.log(record);
- * logger.close();  // flush + close (do it before reading the file on Windows)
- * @endcode
+ * Opened with std::ios::trunc by default, which discards previous content.
+ * With std::ios::app the header is written only when the file is new or empty.
  */
 class CsvLogger {
     std::ofstream file_;
@@ -38,15 +27,7 @@ class CsvLogger {
     bool header_written_ = false;
 
 public:
-    /**
-     * @brief Constructs CSV logger and opens the file.
-     *
-     * @param filepath Path to CSV output file
-     * @param mode Open mode (default `std::ios::trunc`). Use `std::ios::app`
-     *             to append; the header is then emitted only if the file is
-     *             new or empty.
-     * @throws std::runtime_error if the file cannot be opened
-     */
+    /// @throws std::runtime_error if the file cannot be opened
     explicit CsvLogger(std::string_view filepath,
                        std::ios::openmode mode = std::ios::trunc)
         : file_(std::string(filepath), mode | std::ios::out) {
@@ -61,8 +42,8 @@ public:
         }
     }
 
-    /// Flushes on destruction; never throws (a throwing destructor would
-    /// terminate the process and lose the whole measurement).
+    /// Flushes on destruction; never throws, since a throw here would terminate
+    /// the process and lose the measurements.
     ~CsvLogger() noexcept {
         try {
             flush();
@@ -76,14 +57,7 @@ public:
     CsvLogger(CsvLogger&&) = delete;
     CsvLogger& operator=(CsvLogger&&) = delete;
 
-    /**
-     * @brief Logs a timing record as a CSV row.
-     *
-     * Thread-safe. Writes the header on first call (unless appending to a
-     * non-empty file).
-     *
-     * @param record TimingRecord to log
-     */
+    /// Writes the header on the first call unless appending to a non-empty file.
     void log(const TimingRecord& record) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!header_written_) {
@@ -101,20 +75,13 @@ public:
               << detail::escape_csv(record.kernel_name) << '\n';
     }
 
-    /**
-     * @brief Flushes output buffer to disk.
-     */
     void flush() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (file_.is_open()) file_.flush();
     }
 
-    /**
-     * @brief Flushes and closes the output file.
-     *
-     * Required on Windows before reading or deleting the file, as open
-     * files cannot be removed. Safe to call multiple times.
-     */
+    /// Flushes and closes. On Windows the file cannot be read or removed before
+    /// this; safe to call more than once.
     void close() {
         flush();
         std::lock_guard<std::mutex> lock(mutex_);

@@ -82,7 +82,7 @@ TEST(Benchmark, DefaultConfig) {
         cuda_test::launch_dummy();
     }, cfg);
 
-    EXPECT_EQ(stats.count(), 100); // default measure_runs
+    EXPECT_EQ(stats.count(), 100);
     EXPECT_GT(stats.mean(), 0.0);
 }
 

@@ -6,11 +6,7 @@
 namespace cuda_timer {
 namespace detail {
 
-/**
- * @brief Custom deleter for cudaEvent_t using unique_ptr.
- *
- * Ensures cudaEventDestroy is called exactly once, even if exceptions occur.
- */
+// cudaEvent_t is a handle, not a heap pointer: unique_ptr needs a deleter.
 struct EventDeleter {
     void operator()(cudaEvent_t* ev) const noexcept {
         if (ev && *ev) {
@@ -21,13 +17,7 @@ struct EventDeleter {
 
 using EventPtr = std::unique_ptr<cudaEvent_t, EventDeleter>;
 
-/**
- * @brief Creates a CUDA event with the specified flags.
- *
- * @param flags Event creation flags (default: cudaEventDefault)
- * @return EventPtr owning the created event
- * @throws CudaError if event creation fails
- */
+/// @throws CudaError if event creation fails
 inline EventPtr make_event(unsigned int flags = cudaEventDefault) {
     cudaEvent_t ev;
     CUDA_TIMER_CHECK(cudaEventCreateWithFlags(&ev, flags));
@@ -37,31 +27,14 @@ inline EventPtr make_event(unsigned int flags = cudaEventDefault) {
 } // namespace detail
 
 /**
- * @brief RAII wrapper for CUDA event-based timing.
+ * @brief RAII start/stop event pair for one stream.
  *
- * Provides exception-safe timing using cudaEvent_t with unique_ptr management.
- * Captures the device at construction time and restores it before each operation
- * to support multi-device scenarios correctly.
- *
- * Example:
- * @code
- * cuda_timer::Timer timer(stream);
- * timer.start();
- * my_kernel<<<grid, block, 0, stream>>>(...);
- * float ms = timer.stop();
- * @endcode
+ * The device is captured at construction and re-selected before every
+ * operation, so a Timer stays valid on a thread that later switches device.
  */
 class Timer {
 public:
-    /**
-     * @brief Constructs a Timer for the given stream.
-     *
-     * Captures the current CUDA device at construction time.
-     *
-     * @param stream CUDA stream to record events on (default: 0 = default stream)
-     * @param flags Event creation flags (default: cudaEventDefault)
-     * @throws CudaError if event creation or device query fails
-     */
+    /// @throws CudaError if event creation or cudaGetDevice fails
     explicit Timer(cudaStream_t stream = 0, unsigned int flags = cudaEventDefault)
         : start_(detail::make_event(flags))
         , stop_(detail::make_event(flags))
@@ -75,25 +48,12 @@ public:
     Timer(const Timer&) = delete;
     Timer& operator=(const Timer&) = delete;
 
-    /**
-     * @brief Records the start event on the associated stream.
-     *
-     * Must be called before launching the kernel to time.
-     * @throws CudaError if event recording fails
-     */
     void start() {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
         CUDA_TIMER_CHECK(cudaEventRecord(*start_, stream_));
     }
 
-    /**
-     * @brief Records the stop event, synchronizes, and returns elapsed time.
-     *
-     * Blocks until the stop event completes (SyncMode::Blocking behavior).
-     *
-     * @return Elapsed time in milliseconds
-     * @throws CudaError if event recording, synchronization, or elapsed query fails
-     */
+    /// Records the stop event and blocks on it: this is SyncMode::Blocking.
     float stop() {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
         CUDA_TIMER_CHECK(cudaEventRecord(*stop_, stream_));
@@ -103,15 +63,7 @@ public:
         return ms;
     }
 
-    /**
-     * @brief Returns elapsed time without synchronizing (non-blocking).
-     *
-     * Requires that stop event has already been recorded and completed.
-     * Use with SyncMode::NonBlocking workflows.
-     *
-     * @return Elapsed time in milliseconds
-     * @throws CudaError if elapsed time query fails
-     */
+    /// Non-blocking read: the stop event must already be recorded and complete.
     float elapsed() const {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
         float ms = 0;
@@ -119,28 +71,14 @@ public:
         return ms;
     }
 
-    /**
-     * @brief Returns the raw start event handle.
-     *
-     * Null-safe: returns nullptr on moved-from timers.
-     */
+    /// nullptr on a moved-from Timer.
     cudaEvent_t event_start() const noexcept { return start_ ? *start_ : nullptr; }
 
-    /**
-     * @brief Returns the raw stop event handle.
-     *
-     * Null-safe: returns nullptr on moved-from timers.
-     */
+    /// nullptr on a moved-from Timer.
     cudaEvent_t event_stop() const noexcept { return stop_ ? *stop_ : nullptr; }
 
-    /**
-     * @brief Returns the device ID this timer is bound to.
-     */
     int device_id() const noexcept { return device_id_; }
 
-    /**
-     * @brief Returns the stream this timer records events on.
-     */
     cudaStream_t stream() const noexcept { return stream_; }
 
 private:

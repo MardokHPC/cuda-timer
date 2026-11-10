@@ -9,40 +9,19 @@
 namespace cuda_timer {
 
 /**
- * @brief Online statistics using Welford's algorithm.
+ * @brief Running mean/variance (Welford) plus min/max, O(1) per sample.
  *
- * Maintains running mean, variance, min, max, and optionally stores samples
- * for median calculation. Uses numerically stable Welford algorithm for
- * incremental variance computation.
- *
- * Example:
- * @code
- * cuda_timer::Stats stats;
- * stats.reserve(100);  // Pre-allocate for performance
- * for (int i = 0; i < 100; ++i) {
- *     stats.add(measure_kernel());
- * }
- * std::cout << "Mean: " << stats.mean() << " ms\n";
- * std::cout << "StdDev: " << stats.stddev() << " ms\n";
- * std::cout << "Median: " << stats.median() << " ms\n";
- * @endcode
+ * Welford instead of sum-of-squares: timing samples sit far from zero compared
+ * with their spread, and E[x^2] - E[x]^2 cancels badly there.
  */
 struct Stats {
-    size_t count_ = 0;                            ///< Number of samples added
-    double mean_ = 0.0;                           ///< Running mean
-    double m2_ = 0.0;                             ///< Sum of squared differences (for variance)
-    double min_ = std::numeric_limits<double>::infinity();  ///< Minimum value
-    double max_ = -std::numeric_limits<double>::infinity(); ///< Maximum value
-    std::vector<double> samples_;                 ///< Stored samples (if reserve() called)
+    size_t count_ = 0;
+    double mean_ = 0.0;
+    double m2_ = 0.0;                                       ///< Sum of squared deltas
+    double min_ = std::numeric_limits<double>::infinity();
+    double max_ = -std::numeric_limits<double>::infinity();
+    std::vector<double> samples_;                           ///< Empty unless reserve() ran
 
-    /**
-     * @brief Adds a sample using Welford's online algorithm.
-     *
-     * Updates mean, variance, min, max in O(1) time.
-     * If samples vector has reserved capacity, stores the value.
-     *
-     * @param x Value to add
-     */
     void add(double x) noexcept {
         ++count_;
         double delta = x - mean_;
@@ -57,75 +36,38 @@ struct Stats {
     }
 
     /**
-     * @brief Pre-allocates space for samples to avoid reallocations.
+     * @brief Reserves room for n samples so add() starts storing them.
      *
-     * Call before adding samples when you know the number of iterations.
-     * If not called, samples are not stored (saving memory), and median()
-     * will return 0.0.
-     *
-     * @param n Number of samples to reserve space for
+     * Without a successful reserve() only the running aggregates are updated:
+     * lower memory, but median() has nothing to sort.
      */
     void reserve(size_t n) { samples_.reserve(n); }
 
-    /**
-     * @brief Returns the number of samples added.
-     * @return Sample count
-     */
     size_t count() const noexcept { return count_; }
 
-    /**
-     * @brief Returns the stored raw samples.
-     *
-     * Empty unless reserve() was called before adding samples (e.g. via
-     * BenchmarkConfig::store_samples = true). Use with write_samples() to
-     * export the full distribution instead of just summary statistics.
-     *
-     * @return Reference to the stored samples
-     */
+    /// Empty unless reserve() ran; feed it to write_samples() for histograms.
     const std::vector<double>& samples() const noexcept { return samples_; }
 
-    /**
-     * @brief Returns the running mean.
-     * @return Mean value, or 0.0 if no samples added
-     */
     double mean() const noexcept { return mean_; }
 
-    /**
-     * @brief Returns the sample variance (Bessel's correction).
-     * @return Variance, or 0.0 if fewer than 2 samples
-     */
+    /// Bessel-corrected sample variance; 0.0 below two samples.
     double variance() const noexcept { return count_ > 1 ? m2_ / (count_ - 1) : 0.0; }
 
-    /**
-     * @brief Returns the sample standard deviation.
-     * @return Standard deviation, or 0.0 if fewer than 2 samples
-     */
     double stddev() const noexcept { return std::sqrt(variance()); }
 
-    /**
-     * @brief Returns the minimum value seen.
-     * @return Minimum, or +infinity if no samples added
-     */
     double min() const noexcept { return min_; }
 
-    /**
-     * @brief Returns the maximum value seen.
-     * @return Maximum, or -infinity if no samples added
-     */
     double max() const noexcept { return max_; }
 
     /**
-     * @brief Returns the median of stored samples.
+     * @brief Median of the stored samples; 0.0 when none were kept.
      *
-     * Requires that reserve() was called before adding samples.
-     * Makes a copy to avoid mutating internal state.
-     * For even count, returns average of two middle elements.
-     *
-     * @return Median value, or 0.0 if no samples stored
+     * Sorts a copy, so the running state is untouched. Even counts average the
+     * two middle elements.
      */
     double median() const {
         if (samples_.empty()) return 0.0;
-        auto s = samples_;  // Copy to avoid mutating internal state
+        auto s = samples_;
         const size_t mid = s.size() / 2;
         std::nth_element(s.begin(), s.begin() + mid, s.end());
         if (s.size() % 2 == 0) {

@@ -27,15 +27,12 @@ namespace {
 
 // numpunct facet with a comma decimal point: simulates an it/fr/de global
 // locale deterministically, without depending on installed system locales.
-// The facet is handed to std::locale with `new`: the locale takes ownership
-// (reference-counted facet set) and releases it when the restored global
-// locale drops the last reference, so there is no leak here.
+// The facet is owned by the locale (`new` transfers it), so there is no leak.
 class CommaDecimalPunct : public std::numpunct<char> {
 protected:
     char do_decimal_point() const override { return ','; }
 };
 
-// Installs a global locale and restores the previous one on scope exit.
 class GlobalLocaleGuard {
     std::locale previous_;
 public:
@@ -272,7 +269,7 @@ TEST(JsonLogger, DoubleFlushProducesValidJson) {
     logger.flush();
     logger.close();
     logger.flush();
-    logger.close(); // Second flush should not corrupt
+    logger.close();
 
     std::ifstream f(filename);
     std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
@@ -360,7 +357,7 @@ TEST(JsonLogger, FileOpenFailureThrows) {
 }
 
 // ---------------------------------------------------------------------------
-// write_samples() — raw sample export (export.cuh)
+// write_samples(): raw sample export (export.cuh)
 // ---------------------------------------------------------------------------
 
 TEST(WriteSamples, WritesHeaderAndOneRowPerSample) {
@@ -464,11 +461,11 @@ TEST(WriteSamples, BadPathThrows) {
 }
 
 // ---------------------------------------------------------------------------
-// Regression tests for the review findings
+// Regressions: locale, append and flush contracts
 // ---------------------------------------------------------------------------
 
-// #1 — a decimal comma in the host's global locale must never split a value
-// across CSV columns.
+// A decimal comma in the host's global locale must never split a value across
+// CSV columns.
 TEST(CsvLogger, LocaleIndependentDecimalPoint) {
     const std::string filename = "test_locale.csv";
     {
@@ -520,7 +517,7 @@ TEST(JsonLogger, LocaleIndependentDecimalPoint) {
     EXPECT_NE(content.find("\"duration_ms\":0.5"), std::string::npos);
 }
 
-// #3 — appending must keep previous rows and must not duplicate the header.
+// Appending must keep previous rows and must not duplicate the header.
 TEST(CsvLogger, AppendKeepsExistingRowsAndSingleHeader) {
     const std::string filename = "test_append.csv";
     {
@@ -575,8 +572,8 @@ TEST(WriteSamples, AppendKeepsExistingRowsAndSingleHeader) {
     EXPECT_EQ(rows, 2);
 }
 
-// #6 — a periodic flush() must not finalize the array; further records have
-// to stay inside it.
+// A periodic flush() must not finalize the array: further records have to
+// stay inside it.
 TEST(JsonLogger, LogAfterFlushKeepsValidJson) {
     const std::string filename = "test_json_flush_log.json";
     cuda_timer::TimingRecord a{"a", 1.0f, 0, 0, 0, 1,1,1, 1,1,1, "kernel"};
