@@ -4,7 +4,7 @@ project(cuda_timer
     LANGUAGES CUDA CXX
     VERSION 1.1.0
     DESCRIPTION "Header-only CUDA timing/profiling library for GPU kernels"
-    HOMEPAGE_URL "https://github.com/Mardok-dotcom/cuda-timer"
+    HOMEPAGE_URL "https://github.com/MardokHPC/cuda-timer"
 )
 
 # ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ include(CPack)
 set(CPACK_PACKAGE_NAME "cuda-timer")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Header-only CUDA timing/profiling library")
-set(CPACK_PACKAGE_VENDOR "Mardok-dotcom")
-set(CPACK_PACKAGE_CONTACT "Mardok-dotcom")
+set(CPACK_PACKAGE_VENDOR "MardokHPC")
+set(CPACK_PACKAGE_CONTACT "MardokHPC")
 set(CPACK_GENERATOR "ZIP;TGZ")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}")

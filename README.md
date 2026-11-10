@@ -1,6 +1,6 @@
 # cuda-timer
 
-[![CI](https://github.com/Mardok-dotcom/cuda-timer/actions/workflows/ci.yml/badge.svg)](https://github.com/Mardok-dotcom/cuda-timer/actions/workflows/ci.yml)
+[![CI](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml/badge.svg)](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Version](https://img.shields.io/badge/version-1.1.0-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-11.8%2B-76b900?logo=nvidia&logoColor=white)
@@ -52,7 +52,7 @@ Header-only C++/CUDA library to measure GPU kernels, keep every sample, and fail
 ## Quickstart
 
 ```bash
-git clone https://github.com/Mardok-dotcom/cuda-timer.git
+git clone https://github.com/MardokHPC/cuda-timer.git
 cd cuda-timer
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=native
 cmake --build build --config Release
@@ -138,8 +138,8 @@ Include path: `cuda-timer/include`.
 include(FetchContent)
 FetchContent_Declare(
   cuda_timer
-  GIT_REPOSITORY https://github.com/Mardok-dotcom/cuda-timer.git
-  GIT_TAG        v1.1.0
+  GIT_REPOSITORY https://github.com/MardokHPC/cuda-timer.git
+  GIT_TAG        v1.1
 )
 FetchContent_MakeAvailable(cuda_timer)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
