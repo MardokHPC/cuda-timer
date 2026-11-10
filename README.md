@@ -139,7 +139,7 @@ include(FetchContent)
 FetchContent_Declare(
   cuda_timer
   GIT_REPOSITORY https://github.com/MardokHPC/cuda-timer.git
-  GIT_TAG        v1.1
+  GIT_TAG        v1.2
 )
 FetchContent_MakeAvailable(cuda_timer)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
@@ -375,6 +375,10 @@ cuda-timer/
 ├── CONTRIBUTING.md
 └── LICENSE
 ```
+
+## Contributions
+
+- [@saqibkh](https://github.com/saqibkh) — `gpu-sim.yml` ([#1](https://github.com/MardokHPC/cuda-timer/pull/1)): an optional workflow that runs all eight suites on a simulated NVIDIA H100 via [PantheonSim](https://github.com/pantheongpu/pantheonsim), so the device suites are no longer only skipped on hosted runners.
 
 ## License
 
