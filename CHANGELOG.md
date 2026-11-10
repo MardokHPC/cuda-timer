@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `.github/workflows/gpu-sim.yml` (contributed by [@saqibkh](https://github.com/saqibkh)) runs all eight suites on a simulated NVIDIA H100 via [PantheonSim](https://github.com/pantheongpu/pantheonsim), so the four device suites no longer only report `skipped` on hosted runners. Optional and not a required check. The pass criterion counts the suites ctest registered against the ones written to its JUnit file, and fails on any `skipped` / `did not run` line, so a missing device cannot turn into a silent green. Functional only: the simulator has no timing model.
 - `read_samples_csv(path, label)` reads one series out of a samples CSV, and `labels_in_csv(path)` reports the distinct labels in first-appearance order. Both parse the label field with RFC 4180 quoting, so a label holding a comma or a doubled quote round-trips. +5 GoogleTest cases.
 
 ### Changed
