@@ -156,6 +156,23 @@ $ ./build/overhead_floor
 On that device (RTX 2060 SUPER) any difference below ~0.003 ms is measurement
 noise, whatever the gate says. Report the floor next to your numbers.
 
+## Simulated GPUs: functional only
+
+`.github/workflows/gpu-sim.yml` runs all eight suites on a simulated NVIDIA
+H100 through [PantheonSim](https://github.com/pantheongpu/pantheonsim), on a
+hosted runner with no GPU. Without it the four device suites exit with 77 and
+ctest reports them as skipped.
+
+It is a functional check, never a performance one. A simulator has no timing
+model: on a simulated H100 the whole `ctest` run takes 0.03 s for all eight
+suites. A green there means the device code runs and its assertions hold. It
+says nothing about `perf_gate` numbers, it must not replace a real-GPU
+baseline, and the environment fingerprint written on that machine describes
+the simulated card, not your hardware.
+
+The workflow is optional and deliberately not a required check; NVTX is off
+there because the toolkit installed on that runner has no `nvtx3/nvToolsExt.h`.
+
 ## Scope
 
 - The gate compares samples. It does not capture CUDA Graphs and does not do
