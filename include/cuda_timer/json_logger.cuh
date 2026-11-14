@@ -14,31 +14,14 @@ namespace cuda_timer {
 /**
  * @brief Thread-safe streaming JSON array logger.
  *
- * Records are written as they are logged: the array is opened with `[` at
- * construction, records are appended (comma-separated) on log(), and the
- * closing `]` is written by close() — also invoked by the destructor.
+ * '[' is written at construction, each log() appends one object, close() writes
+ * ']'. The file is a valid array only after close(): before that it holds a
+ * valid prefix, which survives a crash and can be salvaged by appending ']'.
+ * flush() only pushes buffered bytes to disk, so it never has to finalize.
  *
- * This is what makes flush() safe to call at any time, any number of times:
- * flush() only pushes buffered bytes to disk, it never finalizes the array.
- * Consequence to be aware of: the file holds a complete, valid JSON array
- * only after close(). While the logger is open it contains a valid array
- * *prefix*, which survives a crash and can be salvaged by appending `]`.
- *
- * Numbers are written with the classic "C" locale, so a decimal comma coming
- * from the host program's global locale cannot produce invalid JSON.
- *
- * The file is always truncated on open and cannot be appended to (two arrays
- * cannot be concatenated into one valid document). Use CsvLogger with
- * `std::ios::app` when accumulating runs in a single file matters.
- *
- * Example:
- * @code
- * cuda_timer::JsonLogger logger("timings.json", true);  // pretty
- * logger.log(record);
- * logger.flush();   // safe, repeatable, never corrupts the document
- * logger.log(record2);
- * logger.close();   // writes the closing ']'
- * @endcode
+ * Always truncated on open and never appended to: two arrays cannot be
+ * concatenated into one document. Numbers use the classic locale, so the
+ * output stays valid JSON whatever the program's global locale is.
  */
 class JsonLogger {
     std::ofstream file_;
@@ -47,10 +30,6 @@ class JsonLogger {
     bool first_record_ = true;
     bool closed_ = false;
 
-    /**
-     * @brief Escapes a string for JSON.
-     * Handles quotes, backslashes, and control characters.
-     */
     static std::string escape_json(const std::string& s) {
         std::string escaped;
         escaped.reserve(s.size() + 4);
@@ -77,16 +56,7 @@ class JsonLogger {
     }
 
 public:
-    /**
-     * @brief Constructs JSON logger, opens the file and starts the array.
-     *
-     * The file is opened with `std::ios::trunc`: previous content is
-     * discarded.
-     *
-     * @param filepath Path to JSON output file
-     * @param pretty If true, writes pretty-printed JSON with indentation
-     * @throws std::runtime_error if file cannot be opened
-     */
+    /// @throws std::runtime_error if the file cannot be opened
     explicit JsonLogger(std::string_view filepath, bool pretty = true)
         : file_(std::string(filepath), std::ios::trunc | std::ios::out),
           pretty_(pretty) {
@@ -97,8 +67,8 @@ public:
         file_ << '[';
     }
 
-    /// Closes the array and flushes on destruction; never throws (a throwing
-    /// destructor would terminate the process and lose the whole run).
+    /// Closes the array and flushes on destruction; never throws, since a throw
+    /// here would terminate the process and lose the whole run.
     ~JsonLogger() noexcept {
         try {
             close();
@@ -112,15 +82,7 @@ public:
     JsonLogger(JsonLogger&&) = delete;
     JsonLogger& operator=(JsonLogger&&) = delete;
 
-    /**
-     * @brief Logs a timing record, appending it to the JSON array.
-     *
-     * Thread-safe. The record is written immediately (not buffered), so a
-     * crash loses at most the record in flight.
-     *
-     * @param record TimingRecord to log
-     * @throws std::runtime_error if called after close()
-     */
+    /// @throws std::runtime_error when called after close()
     void log(const TimingRecord& record) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (closed_) {
@@ -143,23 +105,14 @@ public:
         first_record_ = false;
     }
 
-    /**
-     * @brief Pushes buffered bytes to disk.
-     *
-     * Thread-safe. Never finalizes the array and never writes a `]`, so it
-     * can be called periodically and interleaved with log() calls.
-     */
+    /// Pushes buffered bytes to disk; never writes the closing ']'.
     void flush() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (file_.is_open()) file_.flush();
     }
 
-    /**
-     * @brief Writes the closing `]`, flushes, and closes the file.
-     *
-     * Required on Windows before reading or deleting the file, as open files
-     * cannot be removed. Safe to call multiple times.
-     */
+    /// Writes ']', flushes and closes. Required on Windows before the file can be
+    /// read or removed; safe to call more than once.
     void close() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (closed_) return;

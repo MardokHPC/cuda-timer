@@ -194,9 +194,9 @@ int main(int argc, char** argv) {
     std::string current_label;
     std::string label_problem;
     try {
-        // Every file must hold exactly one series, and all runs on a side must
-        // describe the same kernel: write_samples(..., std::ios::app) can
-        // append a different one, and pooling would compare nothing real.
+        // One series per file, and all runs on a side must be the same kernel:
+        // write_samples(..., std::ios::app) can append a different one, and
+        // pooling would compare nothing real.
         const auto read_side = [](const std::vector<std::string>& paths,
                                   const char* side,
                                   std::vector<std::vector<double>>* runs,

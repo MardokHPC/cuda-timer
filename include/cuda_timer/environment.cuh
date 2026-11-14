@@ -11,9 +11,7 @@
 namespace cuda_timer {
 namespace detail {
 
-/**
- * @brief Formats an integer CUDA version (e.g. 12010) as "12.1".
- */
+/// 12010 -> "12.1".
 inline std::string format_cuda_version(int version) {
     if (version <= 0) return "unknown";
     const int major = version / 1000;
@@ -24,14 +22,10 @@ inline std::string format_cuda_version(int version) {
 } // namespace detail
 
 /**
- * @brief Captures the hardware/runtime identity of a measurement.
+ * @brief What a measurement ran on: device, compute capability, CUDA versions.
  *
- * Uses only the CUDA runtime (no NVML): device name, compute capability,
- * CUDA driver API version and CUDA runtime version. Two series measured with
- * different values are not comparable.
- *
- * @param device_id Device to describe (default: 0)
- * @throws CudaError on CUDA failure
+ * Runtime API only, no NVML: no extra dependency, and it works on any driver
+ * new enough to run the binary.
  */
 inline Environment capture_environment(int device_id = 0) {
     int device_count = 0;
@@ -56,21 +50,12 @@ inline Environment capture_environment(int device_id = 0) {
 }
 
 /**
- * @brief Writes the environment sidecar (`*.meta.json`) for a samples file.
+ * @brief Writes the .meta.json sidecar describing how a samples file was measured.
  *
- * Typical use, next to write_samples():
- * @code
- * cuda_timer::write_samples("current.csv", "my_kernel", stats);
- * cuda_timer::write_environment("current.meta.json");
- * @endcode
+ * perf_gate looks for it by swapping the .csv extension for .meta.json.
  *
- * The perf_gate CLI auto-detects the sidecar by replacing the `.csv`
- * extension with `.meta.json`.
- *
- * @param path      Output path
- * @param device_id Device to describe (default: 0)
- * @throws std::runtime_error if the file cannot be written
- * @throws CudaError on CUDA failure
+ * @throws std::runtime_error if the file cannot be written, CudaError on CUDA
+ *         failure
  */
 inline void write_environment(const std::string& path, int device_id = 0) {
     const Environment environment = capture_environment(device_id);
