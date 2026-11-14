@@ -1,5 +1,5 @@
-// The only CUDA translation unit in the test suite: GoogleTest must not be
-// compiled by nvcc (see cuda_test_kernels.cuh for the reason).
+// The only CUDA translation unit of the test suite: GoogleTest must not go
+// through nvcc (see cuda_test_kernels.cuh).
 
 #include "cuda_test_kernels.cuh"
 

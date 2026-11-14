@@ -10,29 +10,22 @@
 namespace cuda_timer {
 
 /**
- * @brief Measured floor of the timing mechanism itself.
+ * @brief How small a duration this machine can measure at all.
  *
- * Back-to-back CUDA events with no work in between show how small a duration
- * can be measured before it is indistinguishable from measurement overhead.
- * Treat values at or below `median_ms` as "not measurable" on this device.
+ * Timing back-to-back events with no work between them gives the cost of the
+ * measurement itself: at or below median_ms a duration is indistinguishable
+ * from overhead.
  */
 struct OverheadFloor {
     std::size_t runs = 0;
     double min_ms = 0.0;
-    double median_ms = 0.0;  ///< Upper middle element for even run counts
+    double median_ms = 0.0;  ///< Upper middle element for even counts
     double mean_ms = 0.0;
 };
 
 /**
- * @brief Measures the event-pair overhead by timing empty start/stop pairs.
+ * @brief Times empty start/stop event pairs, so no kernel cost enters the result.
  *
- * Each iteration records the start event, records the stop event and waits for
- * it, so the measured interval is the cost of the two events themselves, not
- * the cost of any kernel.
- *
- * @param runs   Number of start/stop pairs (>= 1)
- * @param stream Stream to record on (default: 0)
- * @return Floor statistics in milliseconds
  * @throws std::invalid_argument if runs == 0
  * @throws CudaError on CUDA failure
  */

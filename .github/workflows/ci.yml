@@ -1,23 +1,14 @@
-# cuda-timer CI (T3.5)
+# Hosted runners have no GPU, so the verdict has to stay explicit:
+#   * build        - configure + compile, must stay green.
+#   * runtime-test - plain ctest, no continue-on-error. Host-only suites
+#                    (logger, stats, types, compare) really run and can fail
+#                    the job; device suites exit 77 (tests/test_main_device.cpp)
+#                    and ctest reports them SKIPPED, not as a silent pass.
+# A real GPU run needs a self-hosted runner reusing the same three steps.
 #
-# COSA GIRA DOVE
-# -------------
-# - GitHub HOSTED runners (ubuntu-22.04 / windows-2022): NON hanno GPU.
-#   Il job `build` fa configure + compile e DEVE restare verde.
-#   Il job `runtime-test` esegue `ctest` senza `continue-on-error` ed e' un
-#   gate reale: le suite host-only (test_logger, test_stats, test_types)
-#   girano davvero e un loro fallimento rende il job rosso, mentre le suite
-#   che richiedono un device (test_timer, test_benchmark) escono con codice
-#   77 e ctest le riporta come SKIPPED. Senza GPU il verdetto e' quindi
-#   esplicito ("N skipped"), non un verde che nasconde un fallimento.
-# - SELF-HOSTED GPU runner: per il full test reale, aggiungere un job con
-#   `runs-on: [self-hosted, gpu]` che riusa gli stessi step di configure /
-#   build / ctest (vedi job `gpu-test` commentato in fondo come template).
-#
-# NOTE ARCH: CMAKE_CUDA_ARCHITECTURES=70 (PTX embedded -> JIT su sm_70/80/90,
-# compila e gira ovunque senza rigenerare SASS per ogni arch). Resta valido
-# fino a CUDA 12.x: Volta (sm_70) e' stato rimosso solo in CUDA 13, per cui
-# la leg Windows usa l'ultima 12.x (12.9.2) e non la 13.x.
+# Arch 70 embeds PTX, which the driver JITs on sm_70/80/90: one build for every
+# GPU instead of one per architecture. Valid up to CUDA 12.x (Volta was dropped
+# in CUDA 13), which is why the Windows leg uses 12.9.2 and not 13.x.
 
 name: CI
 
@@ -27,7 +18,7 @@ name: CI
   pull_request:
     branches: [main, master]
 
-# Una nuova push sulla stessa PR cancella il run precedente ancora in coda.
+# A new push to the same PR cancels the run still queued.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -37,16 +28,12 @@ env:
   CUDA_ARCH: 70
 
 jobs:
-  # ------------------------------------------------------------------
-  # Job 1 (obbligatorio, deve essere verde): configure + compile.
-  # ------------------------------------------------------------------
+  # Mandatory: configure + compile.
   build:
     name: Build (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
     runs-on: ${{ matrix.os }}
-    # Windows runners ship MSVC 14.44 (VS 17.14), newer than what CUDA
-    # 11.8/12.1 support, so nvcc aborts the compiler-id check with
-    # "#error: -- unsupported Microsoft Visual Studio version!". Allow it.
-    # Harmless on Linux, where the host compiler is supported.
+    # Windows runners ship MSVC 14.44 (VS 17.14), newer than CUDA 11.8/12.1
+    # accept: nvcc aborts the compiler-id check. Harmless on Linux.
     env:
       NVCC_PREPEND_FLAGS: --allow-unsupported-compiler
     strategy:
@@ -69,7 +56,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Su Windows il generator Ninja ha bisogno di cl.exe nel PATH.
+      # Ninja needs cl.exe in PATH on Windows.
       - name: Setup MSVC dev cmd (Windows only)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -90,10 +77,9 @@ jobs:
           echo "CUDA_TOOLKIT_ROOT_DIR=$CUDA_TOOLKIT_ROOT_DIR"
 
       # Configure/build do NOT run under bash on Windows: GitHub prepends
-      # C:\Program Files\Git\usr\bin to PATH for bash steps, and Git ships its
-      # own link.exe, which CMake then picks as the linker for the CUDA
-      # compiler test ("link: unknown option -- L"). pwsh (the default
-      # Windows shell) keeps the MSVC toolchain ahead of it.
+      # C:\Program Files\Git\usr\bin to PATH there, Git ships its own link.exe,
+      # and CMake picks it for the CUDA compiler test ("link: unknown option
+      # -- L"). pwsh keeps the MSVC toolchain first.
       - name: Configure (Ninja, arch sm_70, examples+tests+NVTX ON)
         if: runner.os != 'Windows'
         shell: bash
@@ -124,8 +110,7 @@ jobs:
         if: runner.os == 'Windows'
         run: cmake --build build
 
-      # Header-only: l'artefatto utile e' la cartella degli header.
-      # actions/upload-artifact zipp automaticamente la directory.
+      # Header-only: the useful artifact is the header directory.
       - name: Upload headers artifact
         uses: actions/upload-artifact@v4
         with:
@@ -133,13 +118,7 @@ jobs:
           path: include/cuda_timer/
           if-no-files-found: error
 
-  # ------------------------------------------------------------------
-  # Job 2: ctest, gate reale (nessun continue-on-error). Le suite
-  # host-only girano sempre; test_timer / test_benchmark escono con
-  # codice 77 senza device CUDA (tests/test_main_device.cpp) e ctest le
-  # riporta come SKIPPED. Con una GPU gli stessi test girano davvero e
-  # un fallimento e' rosso.
-  # ------------------------------------------------------------------
+  # ctest as a real gate: no continue-on-error.
   runtime-test:
     name: Runtime test (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
     needs: build
@@ -213,30 +192,3 @@ jobs:
       - name: Run ctest (skipped without a GPU, real run with one)
         shell: bash
         run: ctest --test-dir build --output-on-failure --timeout 300
-
-  # ------------------------------------------------------------------
-  # TEMPLATE self-hosted GPU (scommentare quando disponibile un runner
-  # con GPU NVIDIA + label [self-hosted, gpu]):
-  #
-  #  gpu-test:
-  #    name: Full GPU test (self-hosted)
-  #    runs-on: [self-hosted, gpu]
-  #    strategy:
-  #      fail-fast: false
-  #      matrix:
-  #        cuda: ["11.8.0", "12.1.1", "12.9.2"]
-  #    steps:
-  #      - uses: actions/checkout@v4
-  #      # Su self-hosted il toolkit e' di solito preinstallato: se serve,
-  #      # riattivare qui lo step Jimver/cuda-toolkit.
-  #      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-  #              -DCMAKE_CUDA_ARCHITECTURES=70
-  #              -DCUDA_TIMER_BUILD_EXAMPLES=ON -DCUDA_TIMER_BUILD_TESTS=ON
-  #              -DCUDA_TIMER_NVTX=ON
-  #        shell: bash
-  #      - run: cmake --build build
-  #        shell: bash
-  #      - run: ctest --test-dir build --output-on-failure --timeout 300
-  #        shell: bash
-  #      # Smoke test esempi (solo con GPU!): ./build/basic_usage, ecc.
-  # ------------------------------------------------------------------

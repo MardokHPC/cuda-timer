@@ -30,7 +30,7 @@ TEST(Stats, WelfordAlgorithm) {
     for (double x : data) s.add(x);
 
     double expected_mean = 3.0;
-    double expected_var = 2.5; // sample variance
+    double expected_var = 2.5;  // Bessel-corrected: 10/4, not 10/5
 
     EXPECT_DOUBLE_EQ(s.mean(), expected_mean);
     EXPECT_NEAR(s.variance(), expected_var, 1e-10);

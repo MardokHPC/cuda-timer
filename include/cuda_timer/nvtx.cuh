@@ -18,13 +18,11 @@
 #endif
 
 #ifdef NVTX_ENABLED
-// ABI types from the toolkit header. This include MUST stay at global scope:
-// pulling a system or third-party header inside a namespace puts its
-// declarations (and the ones it transitively pulls from glibc) into that
-// namespace. glibc's include guards then report the headers as already
-// included while the global declarations never appear, so any later
-// <unistd.h>/<sys/stat.h> consumer - GoogleTest, for instance - fails with
-// "identifier rmdir is undefined" / "incomplete class type stat".
+// MUST stay at global scope. A system or toolkit header pulled inside a
+// namespace takes its declarations (and glibc's, transitively) with it while
+// the include guards still report the headers as done, so every later
+// <unistd.h>/<sys/stat.h> consumer fails on "identifier rmdir is undefined" /
+// "incomplete class type stat". GoogleTest is the usual victim.
 #include <nvtx3/nvToolsExt.h>
 #endif
 
@@ -32,15 +30,10 @@ namespace cuda_timer::nvtx {
 
 #ifdef NVTX_ENABLED
 
-// ---------------------------------------------------------------------------
-// NVTX is loaded dynamically at runtime (no link-time dependency).
-//
-// Rationale: the CUDA toolkit ships the NVTX headers but NOT the import
-// library (nvToolsExt64_1.lib), so linking against the NVTX C API would
-// fail. Instead we LoadLibrary/GetProcAddress (Windows) or dlopen/dlsym
-// (Linux) the NVTX injection library. If it is not present (no profiler
-// attached, no driver support), all calls are silent no-ops.
-// ---------------------------------------------------------------------------
+// NVTX is loaded at runtime on purpose: the toolkit ships the headers but no
+// import library, so linking the NVTX C API would fail. LoadLibrary/dlopen the
+// injection library instead; without it (no profiler, no driver support) every
+// call below is a no-op.
 
 namespace detail {
 
@@ -58,7 +51,6 @@ struct NvtxLibrary {
 
     NvtxLibrary() {
 #ifdef _WIN32
-        // Ships with the NVIDIA driver / Nsight tools. Absence => no-op.
         handle = ::LoadLibraryA("nvToolsExt64_1.dll");
         if (handle) {
             push_ex = reinterpret_cast<push_ex_fn>(
@@ -77,8 +69,8 @@ struct NvtxLibrary {
 #endif
     }
 
-    // Intentionally leaked (Meyers singleton, destroyed never) so ranges
-    // can still pop during static destruction.
+    // Intentionally leaked (Meyers singleton): ranges may still pop during
+    // static destruction.
     static const NvtxLibrary& instance() {
         static const NvtxLibrary lib;
         return lib;
@@ -90,12 +82,9 @@ struct NvtxLibrary {
 } // namespace detail
 
 /**
- * @brief Pushes an NVTX range with the given name and color.
+ * @brief Pushes an NVTX range; no-op when the NVTX library is absent.
  *
- * No-op if the NVTX runtime library is not present.
- *
- * @param name Range name (ASCII). Must remain valid until pop_range().
- * @param color ARGB color (default: blue 0xFF0000FF)
+ * @param name ASCII, must outlive the matching pop_range()
  */
 inline void push_range(const char* name, uint32_t color = 0xFF0000FF) noexcept {
     const auto& lib = detail::NvtxLibrary::instance();
@@ -112,9 +101,7 @@ inline void push_range(const char* name, uint32_t color = 0xFF0000FF) noexcept {
     lib.push_ex(&attr);
 }
 
-/**
- * @brief Pops the most recent NVTX range. No-op if NVTX is unavailable.
- */
+/// Pops the innermost range; no-op when NVTX is absent.
 inline void pop_range() noexcept {
     const auto& lib = detail::NvtxLibrary::instance();
     if (lib.available()) {
@@ -123,26 +110,10 @@ inline void pop_range() noexcept {
 }
 
 /**
- * @brief RAII wrapper for NVTX ranges.
- *
- * Pushes a range on construction, pops on destruction.
- *
- * Example:
- * @code
- * {
- *     cuda_timer::nvtx::ScopedRange range("my_kernel");
- *     my_kernel<<<...>>>(...);
- * } // range automatically popped here
- * @endcode
+ * @brief RAII range: pushed by the constructor, popped by the destructor.
  */
 class ScopedRange {
 public:
-    /**
-     * @brief Constructs and pushes an NVTX range.
-     *
-     * @param name Range name (ASCII, must outlive this object)
-     * @param color ARGB color (default: blue 0xFF0000FF)
-     */
     explicit ScopedRange(const char* name, uint32_t color = 0xFF0000FF) noexcept {
         push_range(name, color);
     }
@@ -156,21 +127,11 @@ public:
 
 #else // NVTX_ENABLED
 
-/**
- * @brief No-op when NVTX is disabled.
- */
+// Same API with empty bodies, so callers compile unchanged without the toolkit.
 inline void push_range(const char*, uint32_t = 0) noexcept {}
 
-/**
- * @brief No-op when NVTX is disabled.
- */
 inline void pop_range() noexcept {}
 
-/**
- * @brief No-op RAII wrapper when NVTX is disabled.
- *
- * Compiles to empty operations, allowing NVTX code to compile without NVTX headers.
- */
 class ScopedRange {
 public:
     explicit ScopedRange(const char*, uint32_t = 0) noexcept {}

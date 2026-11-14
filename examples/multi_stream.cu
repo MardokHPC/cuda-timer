@@ -7,10 +7,7 @@
 #include <thread>
 #include <chrono>
 
-/**
- * @brief Busy kernel that performs some arithmetic to consume GPU time.
- * Each thread modifies its element 'iterations' times.
- */
+// Burns ALU cycles on one element so each launch has a measurable duration.
 __global__ void busy_kernel(float* data, int n, int iterations) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -22,19 +19,10 @@ __global__ void busy_kernel(float* data, int n, int iterations) {
     }
 }
 
-/**
- * @brief Runs a sequence of kernel launches on a specific stream/device.
- *
- * @param stream_id Logical stream identifier (used for naming/logging)
- * @param device_id Physical CUDA device ID
- * @param iterations Number of kernel launches to perform
- * @param logger Reference to CSV logger (thread-safe)
- */
 void run_stream(int stream_id, int device_id, int iterations, cuda_timer::CsvLogger& logger) {
-    // Set device for this thread
     cudaSetDevice(device_id);
 
-    // Create a non-default stream for concurrent execution
+    // A non-default stream is what lets the two threads overlap.
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
@@ -46,10 +34,9 @@ void run_stream(int stream_id, int device_id, int iterations, cuda_timer::CsvLog
     dim3 block(256);
     dim3 grid((N + block.x - 1) / block.x);
 
-    // Timer bound to the specific stream
     cuda_timer::Timer timer(stream);
 
-    // NVTX range named after stream for profiler visibility
+    // Names per stream, otherwise Nsight shows identical ranges.
     cuda_timer::nvtx::ScopedRange range(("stream_" + std::to_string(stream_id)).c_str());
 
     for (int i = 0; i < iterations; ++i) {
@@ -57,7 +44,6 @@ void run_stream(int stream_id, int device_id, int iterations, cuda_timer::CsvLog
         busy_kernel<<<grid, block, 0, stream>>>(d_data, N, 100);
         float ms = timer.stop();
 
-        // Log each iteration
         cuda_timer::TimingRecord record;
         record.label = "stream_" + std::to_string(stream_id);
         record.duration_ms = ms;
@@ -72,10 +58,8 @@ void run_stream(int stream_id, int device_id, int iterations, cuda_timer::CsvLog
         logger.log(record);
     }
 
-    // Wait for all work on this stream to complete
     cudaStreamSynchronize(stream);
 
-    // Cleanup
     cudaFree(d_data);
     cudaStreamDestroy(stream);
 }
@@ -91,24 +75,21 @@ int main() {
 
     std::cout << "Found " << device_count << " CUDA device(s)\n";
 
-    // Single CSV logger shared across threads (thread-safe)
+    // One logger for every thread: CsvLogger serializes the writes.
     cuda_timer::CsvLogger logger("multi_stream_timing.csv");
 
     const int iterations = 10;
     std::vector<std::thread> threads;
 
-    // Launch up to 2 streams (or fewer if less devices available)
     int streams_to_use = std::min(2, device_count);
 
     std::cout << "Launching " << streams_to_use << " concurrent stream(s), "
               << iterations << " iterations each...\n";
 
     for (int i = 0; i < streams_to_use; ++i) {
-        // Each thread runs on device i with stream i
         threads.emplace_back(run_stream, i, i, iterations, std::ref(logger));
     }
 
-    // Wait for all threads to complete
     for (auto& t : threads) {
         t.join();
     }

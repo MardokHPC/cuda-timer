@@ -53,9 +53,8 @@ TEST(Timer, ElapsedNonBlocking) {
     cuda_timer::Timer timer;
     timer.start();
     cuda_test::launch_dummy();
-    // NonBlocking pattern: record stop event, poll for completion,
-    // then query elapsed WITHOUT synchronizing (stop event must be
-    // recorded first, otherwise cudaEventElapsedTime is invalid).
+    // NonBlocking pattern: record the stop event and poll it before calling
+    // elapsed(), which is only valid once that event has completed.
     CUDA_TIMER_CHECK(cudaEventRecord(timer.event_stop(), 0));
     cudaError_t err;
     do {

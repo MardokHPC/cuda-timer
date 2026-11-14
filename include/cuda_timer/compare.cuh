@@ -26,9 +26,7 @@ enum class Verdict {
                  ///< series / labels
 };
 
-/**
- * @brief Returns the stable lowercase name of a verdict (for logs/JSON).
- */
+/// Stable lowercase name: it is part of the JSON and CI contract.
 inline const char* to_string(Verdict verdict) noexcept {
     switch (verdict) {
         case Verdict::Pass:        return "pass";
@@ -54,11 +52,11 @@ struct SeriesSummary {
 };
 
 /**
- * @brief Hardware/runtime identity of a measurement.
+ * @brief Hardware/runtime identity of a measurement, from the .meta.json
+ * sidecar.
  *
- * Read from the `.meta.json` sidecar written by environment.cuh. Two series
- * measured on different devices, compute capabilities or CUDA runtimes are not
- * comparable, so the gate reports `suspect` instead of a meaningless verdict.
+ * Two series from different devices, compute capabilities or CUDA runtimes are
+ * not comparable: the gate reports `suspect` rather than a verdict.
  */
 struct Environment {
     std::string device_name;
@@ -69,26 +67,25 @@ struct Environment {
 };
 
 /**
- * @brief Tuning knobs for compare() / compare_runs().
+ * @brief Thresholds for compare() / compare_runs().
  */
 struct ComparisonOptions {
-    /// Maximum relative regression on the median that still counts as Pass.
-    /// The comparison uses the median, not the mean: it is far less sensitive
-    /// to a single slow outlier.
+    /// Max relative regression on the median that still counts as Pass. The
+    /// median, not the mean, is the decision statistic: one slow outlier
+    /// (throttling, scheduler hiccup) must not fail a gate on its own.
     double threshold = 0.05;
     /// Below this many samples the verdict is Suspect (noise, not a result).
     std::size_t min_samples = 20;
-    /// If > 0, a current series with coefficient of variation above this value
-    /// is reported as Suspect (the run was too noisy to draw a conclusion).
+    /// If > 0, a noisier current series (coefficient of variation above this)
+    /// is Suspect: the run says nothing about the kernel.
     double max_cv = 0.0;
-    /// If > 0 and several runs are supplied, a spread between run medians
-    /// above this relative value is reported as Suspect. Applies to
-    /// compare_runs() only; a single run has zero spread.
+    /// If > 0, a spread between run medians above this is Suspect: the machine
+    /// was not stable between runs. compare_runs() only.
     double max_run_spread = 0.02;
 };
 
 /**
- * @brief Result of a comparison: summaries, deltas, verdict and environment.
+ * @brief Summaries, deltas, verdict and environment of a comparison.
  */
 struct ComparisonResult {
     SeriesSummary baseline;
@@ -98,32 +95,28 @@ struct ComparisonResult {
     Verdict verdict = Verdict::Suspect;
     std::string reason;
 
-    /// Run-to-run information (1 run when compare() is used directly).
+    /// 1 when compare() is used directly.
     std::size_t baseline_runs = 1;
     std::size_t current_runs = 1;
     double baseline_run_spread = 0.0;
     double current_run_spread = 0.0;
 
-    /// Environment metadata, filled by the CLI when both sidecars are present.
+    /// Filled by the CLI when both sidecars are present.
     bool has_environment = false;
     bool environment_match = false;
     Environment baseline_environment;
     Environment current_environment;
 };
 
-/**
- * @brief Computes count/mean/stddev/min/max/median/p90/p99 of a series.
- */
 inline SeriesSummary summarize(const std::vector<double>& samples);
 
 namespace detail {
 
 /**
- * @brief Locale-independent string-to-double conversion.
+ * @brief Parses a double in the classic "C" locale.
  *
- * std::stod uses the global locale: with an Italian/French/German global
- * locale installed it rejects "0.5". This helper always parses the classic
- * "C" format, matching what write_samples() emits.
+ * std::stod follows the global locale, so with it/fr/de installed it rejects
+ * "0.5" -- the format write_samples() emits.
  */
 inline double parse_double(const std::string& text) {
     std::istringstream stream(text);
@@ -184,10 +177,10 @@ inline std::string trim(const std::string& text) {
 }
 
 /**
- * @brief Extracts a flat JSON field (string or number) from a known schema.
+ * @brief Extracts a flat field from the .meta.json schema.
  *
- * Only used for the `.meta.json` sidecar written by environment.cuh: it is not
- * a general-purpose JSON parser. Throws if the field is missing or malformed.
+ * Not a JSON parser: it only has to read the sidecar written by
+ * environment.cuh, and throws if the field is missing or malformed.
  */
 inline std::string json_field(const std::string& text, const std::string& key) {
     const std::string needle = "\"" + key + "\"";
@@ -278,10 +271,10 @@ inline double run_spread(const std::vector<double>& medians) {
 } // namespace detail
 
 /**
- * @brief Computes count/mean/stddev/min/max/median/p90/p99 of a series.
+ * @brief count/mean/stddev/min/max/median/p90/p99 of one series.
  *
- * Median and percentiles use linear interpolation between the two closest
- * order statistics, which keeps them stable for both odd and even counts.
+ * Percentiles interpolate linearly between the two closest order statistics,
+ * which behaves the same for odd and even counts.
  */
 inline SeriesSummary summarize(const std::vector<double>& samples) {
     SeriesSummary summary;
@@ -313,16 +306,9 @@ inline SeriesSummary summarize(const std::vector<double>& samples) {
 }
 
 /**
- * @brief Compares two series of samples and classifies the difference.
+ * @brief Classifies the difference between a baseline and a current series.
  *
- * The median is the decision statistic: a single slow iteration (throttling,
- * scheduler hiccup) must not fail a gate on its own. p90 is reported for
- * diagnostics.
- *
- * @param baseline Samples of the reference run
- * @param current  Samples of the run under test
- * @param opts     Thresholds and minimum sample count
- * @return Summaries, relative deltas, verdict and a human-readable reason
+ * Decides on the median; p90 is reported for diagnostics only.
  */
 inline ComparisonResult compare(const std::vector<double>& baseline,
                                 const std::vector<double>& current,
@@ -371,17 +357,11 @@ inline ComparisonResult compare(const std::vector<double>& baseline,
 }
 
 /**
- * @brief Compares two sets of runs (each run is one measured series).
+ * @brief Compares several runs per side.
  *
- * Decision statistic: the median of the per-run medians. Descriptive
- * statistics (mean, p90, stddev) are computed on the pooled samples of all
- * runs. When more than one run per side is provided, the spread between run
- * medians is checked against `opts.max_run_spread`; a larger spread means the
- * machine was not stable between runs and the verdict is Suspect.
- *
- * @param baseline_runs One series of samples per reference run
- * @param current_runs  One series of samples per run under test
- * @param opts          Thresholds and minimum sample count
+ * Decides on the median of the per-run medians while the descriptive
+ * statistics come from the pooled samples of all runs, which is what keeps
+ * min_samples and max_cv meaningful here.
  */
 inline ComparisonResult compare_runs(
     const std::vector<std::vector<double>>& baseline_runs,
@@ -463,23 +443,19 @@ inline ComparisonResult compare_runs(
 
 namespace detail {
 
-/**
- * @brief One row of a samples CSV: the series label and the measured value.
- */
 struct SampleRow {
     std::string label;
     double value = 0.0;
 };
 
 /**
- * @brief Parses the first CSV field of a row, honouring RFC 4180 quoting.
+ * @brief First CSV field of a row, honouring RFC 4180 quoting.
  *
- * write_samples() escapes labels, so a label may contain commas and quotes: a
- * quoted field is opened and closed by '"', and an embedded quote is doubled.
- * A label containing CR/LF is written across several physical lines and is
- * deliberately rejected by the row reader rather than silently mis-parsed.
+ * Labels are escaped by write_samples(), so they may hold commas and doubled
+ * quotes. One containing CR/LF spans several physical lines: the row reader
+ * rejects those instead of mis-parsing them.
  *
- * @throws std::runtime_error if the field is not terminated or the row has no
+ * @throws std::runtime_error if the field is unterminated or the row has no
  *         separator
  */
 inline std::string parse_csv_label(const std::string& line) {
@@ -518,7 +494,7 @@ inline std::string join_labels(const std::vector<std::string>& labels) {
 }
 
 /**
- * @brief Reads every row of a samples CSV produced by write_samples().
+ * @brief Every row of a samples CSV produced by write_samples().
  *
  * @throws std::runtime_error if the file is missing, empty or malformed
  */
@@ -569,8 +545,8 @@ inline std::vector<SampleRow> read_sample_rows(const std::string& path) {
 /**
  * @brief One samples file loaded as a single series.
  *
- * `reason` is empty when the file holds exactly one label; otherwise it
- * explains why the file cannot be used as a series.
+ * `reason` stays empty when the file holds exactly one label; otherwise it
+ * says why the file cannot be used as a series.
  */
 struct SeriesFile {
     std::string label;
@@ -603,15 +579,12 @@ inline SeriesFile load_series_file(const std::string& path, const char* side) {
 } // namespace detail
 
 /**
- * @brief Reads a samples CSV as produced by write_samples().
+ * @brief All values of a samples CSV written by write_samples(), any label.
  *
- * Expected format: `label,index,value` header (optional) followed by one row
- * per sample. Every row contributes its value, whatever its label: use the
- * two-argument overload to select one series. Parsing uses the classic "C"
- * locale, so a decimal comma installed globally by the host program cannot
- * break it.
+ * Format: an optional `label,index,value` header, then one row per sample.
+ * Parsing stays in the classic locale, so a decimal comma set globally by the
+ * host program cannot break it.
  *
- * @param path Path to the CSV file
  * @throws std::runtime_error if the file is missing, empty or malformed
  */
 inline std::vector<double> read_samples_csv(const std::string& path) {
@@ -623,13 +596,11 @@ inline std::vector<double> read_samples_csv(const std::string& path) {
 }
 
 /**
- * @brief Reads only the samples of one series from a samples CSV.
+ * @brief Values of one series only, for files that may hold several labels.
  *
- * Use this when the file may hold more than one label, for instance after
- * write_samples(..., std::ios::app) appended a second kernel to it.
+ * The label match is case sensitive. Use this after
+ * write_samples(..., std::ios::app) appended a second kernel to the file.
  *
- * @param path  Path to the CSV file
- * @param label Exact series label to keep (case sensitive)
  * @throws std::runtime_error if the file is malformed or no row has that label
  */
 inline std::vector<double> read_samples_csv(const std::string& path,
@@ -646,7 +617,7 @@ inline std::vector<double> read_samples_csv(const std::string& path,
 }
 
 /**
- * @brief Distinct labels in a samples CSV, in order of first appearance.
+ * @brief Distinct labels of a samples CSV, in order of first appearance.
  *
  * @throws std::runtime_error if the file is missing, empty or malformed
  */
@@ -662,13 +633,11 @@ inline std::vector<std::string> labels_in_csv(const std::string& path) {
 }
 
 /**
- * @brief Convenience overload comparing two samples CSV files.
+ * @brief Compares two samples CSV files.
  *
- * Refuses to decide (Suspect) when a file holds more than one series, or when
- * the two series have different labels. write_samples(..., std::ios::app) can
- * append a second kernel to the same file, and pooling those rows would
- * produce a verdict about neither kernel; the same goes for comparing a
- * baseline recorded from kernel A against a current recorded from kernel B.
+ * Suspect, not a verdict, when a file holds several series or the labels
+ * differ: write_samples(..., std::ios::app) can append a second kernel to one
+ * file, and pooling those rows would grade neither kernel.
  */
 inline ComparisonResult compare_files(const std::string& baseline_csv,
                                       const std::string& current_csv,
@@ -700,7 +669,7 @@ inline ComparisonResult compare_files(const std::string& baseline_csv,
 }
 
 /**
- * @brief Reads the environment sidecar written by write_environment().
+ * @brief Reads the sidecar written by write_environment().
  *
  * @throws std::runtime_error if the file is missing or a required field is not
  *         present
@@ -728,9 +697,6 @@ inline Environment read_environment(const std::string& path) {
     return env;
 }
 
-/**
- * @brief Serializes an environment as a multi-line JSON document.
- */
 inline std::string environment_json(const Environment& env) {
     std::ostringstream out;
     out.imbue(std::locale::classic());
@@ -745,16 +711,13 @@ inline std::string environment_json(const Environment& env) {
 }
 
 /**
- * @brief Decides whether two environments are comparable.
+ * @brief Whether two environments are comparable.
  *
- * Device count is intentionally ignored: a machine can gain or lose a GPU
- * without invalidating a measurement of a specific device. Name, compute
- * capability and CUDA versions must match.
+ * Name, compute capability and CUDA versions must match. Device count is
+ * ignored on purpose: a machine can gain or lose a GPU without invalidating a
+ * measurement of a specific one.
  *
- * @param a First environment
- * @param b Second environment
- * @param reason Optional out-parameter, set to the first differing field
- * @return true when the two environments are comparable
+ * @param reason If non-null, receives the first differing field name.
  */
 inline bool environment_compatible(const Environment& a, const Environment& b,
                                    std::string* reason = nullptr) {
@@ -771,10 +734,10 @@ inline bool environment_compatible(const Environment& a, const Environment& b,
 }
 
 /**
- * @brief Serializes a comparison result as stable, human-readable JSON.
+ * @brief Comparison result as stable, human-readable JSON.
  *
- * Numbers are always written with the classic "C" locale, so the document is
- * valid JSON regardless of the host program's global locale.
+ * Numbers are formatted in the classic "C" locale, so the document is valid
+ * JSON whatever the host program's global locale is.
  */
 inline std::string to_json(const ComparisonResult& result) {
     std::ostringstream out;
