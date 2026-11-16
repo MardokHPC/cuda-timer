@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.2.1] - 2026-11-16
+
+### Changed
+
+- `Stats::median()` throws `std::logic_error` when no samples were stored, instead of returning `0.0`. Without `reserve()`, or with `reserve()` called and nothing added yet, zero was indistinguishable from a real measurement of zero, in the one statistic the performance gate decides on. `write_samples()` on such a `Stats` still writes the header alone: an empty file says so, a fabricated `0.0` does not.
+
+### Fixed
+
+- `project(VERSION)` still said `1.1.0` after the 1.2 release, so a 1.2 build installed a CMake package that advertised 1.1.0 through `cuda_timer-config-version.cmake` and `find_package(cuda_timer 1.2)` failed against an install of exactly that version. Version, README badge, `find_package` line and `FetchContent` tag now agree on 1.2.1.
+
 ## [1.2] - 2026-11-10
 
 ### Added
