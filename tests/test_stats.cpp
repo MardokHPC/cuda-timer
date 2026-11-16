@@ -63,9 +63,15 @@ TEST(Stats, MedianEven) {
     EXPECT_DOUBLE_EQ(s.median(), 2.5);
 }
 
-TEST(Stats, NoSamplesEmptyMedian) {
+TEST(Stats, MedianWithoutSamplesThrows) {
     cuda_timer::Stats s;
-    EXPECT_DOUBLE_EQ(s.median(), 0.0);
+    EXPECT_THROW(s.median(), std::logic_error);
+}
+
+TEST(Stats, MedianAfterReserveButNoAddThrows) {
+    cuda_timer::Stats s;
+    s.reserve(10);
+    EXPECT_THROW(s.median(), std::logic_error);
 }
 
 TEST(Stats, LargeNumbersNoOverflow) {
@@ -91,6 +97,7 @@ TEST(Stats, ReserveZeroDoesNotAllocate) {
     EXPECT_EQ(s.count(), 1);
     EXPECT_DOUBLE_EQ(s.mean(), 1.0);
     EXPECT_TRUE(s.samples_.empty());
+    EXPECT_THROW(s.median(), std::logic_error);
 }
 
 TEST(Stats, MinMaxUpdate) {

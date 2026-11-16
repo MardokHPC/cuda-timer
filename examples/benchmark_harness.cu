@@ -38,7 +38,7 @@ void run_benchmark(const char* name, cuda_timer::SyncMode mode,
     cfg.warmup_runs = 10;
     cfg.measure_runs = 100;
     cfg.sync_mode = mode;
-    cfg.store_samples = true;  // Without samples, median() returns 0.0
+    cfg.store_samples = true;  // Without samples, median() throws
     cfg.use_nvtx = true;
 
     std::cout << "\n=== " << name << " ("

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml/badge.svg)](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Version](https://img.shields.io/badge/version-1.1.0-orange)
+![Version](https://img.shields.io/badge/version-1.2.1-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-11.8%2B-76b900?logo=nvidia&logoColor=white)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue?logo=cplusplus&logoColor=white)
 
@@ -139,7 +139,7 @@ include(FetchContent)
 FetchContent_Declare(
   cuda_timer
   GIT_REPOSITORY https://github.com/MardokHPC/cuda-timer.git
-  GIT_TAG        v1.2
+  GIT_TAG        v1.2.1
 )
 FetchContent_MakeAvailable(cuda_timer)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
@@ -148,7 +148,7 @@ target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
 ### Option C: installed package
 
 ```cmake
-find_package(cuda_timer 1.1.0 REQUIRED)
+find_package(cuda_timer 1.2.1 REQUIRED)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
 ```
 
@@ -184,7 +184,7 @@ target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
 | `Stats::add(x)` | Welford update of mean/variance/min/max; stores the sample only if reserved |
 | `Stats::reserve(n)` | Pre-allocates the sample buffer; required for `median()` and `samples()` |
 | `Stats::count()` / `mean()` / `variance()` / `stddev()` / `min()` / `max()` | Summary values |
-| `Stats::median() const` | Median via `nth_element`; `0.0` if no samples stored |
+| `Stats::median() const` | Median via `nth_element`; throws `std::logic_error` if no samples were stored |
 | `Stats::samples() const` | Raw stored samples (empty unless `reserve()` was called) |
 
 ### `benchmark.cuh` — benchmark harness
@@ -303,7 +303,7 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 
 - **Warm up first.** Keep `warmup_runs >= 10` so clocks boost and caches settle before measuring.
 - **`NonBlocking` for microbenchmarks.** Polls with `cudaEventQuery` instead of `cudaDeviceSynchronize()` per iteration, removing device-wide sync overhead on sub-millisecond kernels.
-- **`reserve()` before `median()`.** Set `store_samples = true` (which calls `stats.reserve(measure_runs)`); otherwise `median()` returns `0.0` and memory stays flat.
+- **`reserve()` before `median()`.** Set `store_samples = true` (which calls `stats.reserve(measure_runs)`); otherwise `median()` throws and memory stays flat.
 - **NVTX costs ~zero when absent.** If `nvToolsExt64_1.dll` / `libnvToolsExt.so` is not found, `push_range` / `pop_range` / `ScopedRange` return immediately.
 - **One `Timer` per stream/device.** Events are stream-ordered; `Timer` re-selects its construction device on every call, so multi-stream and multi-GPU code stays correct.
 - **Export the distribution, not just the summary.** Mean and median hide multi-modal behaviour (clock- vs memory-bound regimes) that a histogram shows immediately.
@@ -311,7 +311,7 @@ Writes `benchmark_results.csv` + `benchmark_results.json`. Results vary with GPU
 
 ## Quality
 
-- **8 test suites / 121 GoogleTest cases**, wired into `ctest`.
+- **8 test suites / 122 GoogleTest cases**, wired into `ctest`.
 - Host-only suites always run; device suites exit with code 77 without a GPU and are reported as `skipped` instead of failing.
 - GoogleTest is never compiled by `nvcc`: the suites are host C++ (`.cpp`) and the only CUDA translation unit in the test tree is `tests/cuda_test_kernels.cu`, which exposes a kernel launcher. Compiling gtest headers with `nvcc` fails on glibc hosts, where its device pass does not see the POSIX declarations gtest relies on (`rmdir`, `isatty`, `struct stat`).
 - CI matrix: Ubuntu 22.04 with CUDA 11.8 and 12.1 (the documented floor), Windows 2022 with CUDA 12.9 (MSVC 14.44's STL headers reject CUDA < 12.4). Warnings are fatal everywhere: `-Wall -Wextra -Wpedantic -Werror` for host C++, `/W4 /WX` for MSVC, and `-Wall -Wextra -Werror` for `.cu` files (routed through `-Xcompiler`; `nvcc`'s own generated code is not `-Wpedantic`-clean).

@@ -5,6 +5,7 @@
 #include <limits>
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace cuda_timer {
 
@@ -60,13 +61,20 @@ struct Stats {
     double max() const noexcept { return max_; }
 
     /**
-     * @brief Median of the stored samples; 0.0 when none were kept.
+     * @brief Median of the stored samples.
      *
      * Sorts a copy, so the running state is untouched. Even counts average the
      * two middle elements.
+     *
+     * @throws std::logic_error if nothing was stored, i.e. reserve() never ran
+     *         or add() was never called: 0.0 would be indistinguishable from a
+     *         real measurement that happens to be zero.
      */
     double median() const {
-        if (samples_.empty()) return 0.0;
+        if (samples_.empty()) {
+            throw std::logic_error(
+                "Stats::median(): no samples stored; call reserve(n) before add()");
+        }
         auto s = samples_;
         const size_t mid = s.size() / 2;
         std::nth_element(s.begin(), s.begin() + mid, s.end());
