@@ -6,11 +6,15 @@
 namespace cuda_timer {
 namespace detail {
 
-// cudaEvent_t is a handle, not a heap pointer: unique_ptr needs a deleter.
+// cudaEvent_t is a handle, not a heap cell: the unique_ptr stores the handle
+// itself and the deleter only has to destroy it. Wrapping the handle in `new`
+// would leak one allocation per event.
 struct EventDeleter {
-    void operator()(cudaEvent_t* ev) const noexcept {
-        if (ev && *ev) {
-            cudaEventDestroy(*ev);
+    using pointer = cudaEvent_t;
+
+    void operator()(pointer ev) const noexcept {
+        if (ev) {
+            cudaEventDestroy(ev);
         }
     }
 };
@@ -21,7 +25,7 @@ using EventPtr = std::unique_ptr<cudaEvent_t, EventDeleter>;
 inline EventPtr make_event(unsigned int flags = cudaEventDefault) {
     cudaEvent_t ev;
     CUDA_TIMER_CHECK(cudaEventCreateWithFlags(&ev, flags));
-    return EventPtr(new cudaEvent_t(ev), EventDeleter{});
+    return EventPtr(ev);
 }
 
 } // namespace detail
@@ -50,16 +54,16 @@ public:
 
     void start() {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
-        CUDA_TIMER_CHECK(cudaEventRecord(*start_, stream_));
+        CUDA_TIMER_CHECK(cudaEventRecord(start_.get(), stream_));
     }
 
     /// Records the stop event and blocks on it: this is SyncMode::Blocking.
     float stop() {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
-        CUDA_TIMER_CHECK(cudaEventRecord(*stop_, stream_));
-        CUDA_TIMER_CHECK(cudaEventSynchronize(*stop_));
+        CUDA_TIMER_CHECK(cudaEventRecord(stop_.get(), stream_));
+        CUDA_TIMER_CHECK(cudaEventSynchronize(stop_.get()));
         float ms = 0;
-        CUDA_TIMER_CHECK(cudaEventElapsedTime(&ms, *start_, *stop_));
+        CUDA_TIMER_CHECK(cudaEventElapsedTime(&ms, start_.get(), stop_.get()));
         return ms;
     }
 
@@ -67,15 +71,15 @@ public:
     float elapsed() const {
         CUDA_TIMER_CHECK(cudaSetDevice(device_id_));
         float ms = 0;
-        CUDA_TIMER_CHECK(cudaEventElapsedTime(&ms, *start_, *stop_));
+        CUDA_TIMER_CHECK(cudaEventElapsedTime(&ms, start_.get(), stop_.get()));
         return ms;
     }
 
     /// nullptr on a moved-from Timer.
-    cudaEvent_t event_start() const noexcept { return start_ ? *start_ : nullptr; }
+    cudaEvent_t event_start() const noexcept { return start_.get(); }
 
     /// nullptr on a moved-from Timer.
-    cudaEvent_t event_stop() const noexcept { return stop_ ? *stop_ : nullptr; }
+    cudaEvent_t event_stop() const noexcept { return stop_.get(); }
 
     int device_id() const noexcept { return device_id_; }
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Fixed
+
+- `Timer` allocated a `cudaEvent_t` on the host heap for each event so the handle could sit inside a `unique_ptr`, and the deleter destroyed the CUDA event but never released that cell: two allocations of `sizeof(cudaEvent_t)` leaked per `Timer`. The deleter now declares `pointer = cudaEvent_t`, so the handle is stored in the `unique_ptr` itself and no allocation happens at all.
+
 ## [1.2.1] - 2026-11-16
 
 ### Changed

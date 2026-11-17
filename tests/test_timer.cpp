@@ -5,6 +5,12 @@
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
 #include <memory>
+#include <type_traits>
+
+// The event handle lives inside the unique_ptr, so a Timer allocates no host
+// memory. If this stops holding, EventDeleter is leaking a heap cell per event.
+static_assert(std::is_same<cuda_timer::detail::EventPtr::pointer, cudaEvent_t>::value,
+              "EventPtr must store the cudaEvent_t handle by value");
 
 TEST(Timer, ConstructorCreatesEvents) {
     cuda_timer::Timer timer;
