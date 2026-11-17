@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml/badge.svg)](https://github.com/MardokHPC/cuda-timer/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Version](https://img.shields.io/badge/version-1.2.1-orange)
+![Version](https://img.shields.io/badge/version-1.2.2-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-11.8%2B-76b900?logo=nvidia&logoColor=white)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue?logo=cplusplus&logoColor=white)
 
@@ -139,7 +139,7 @@ include(FetchContent)
 FetchContent_Declare(
   cuda_timer
   GIT_REPOSITORY https://github.com/MardokHPC/cuda-timer.git
-  GIT_TAG        v1.2.1
+  GIT_TAG        v1.2.2
 )
 FetchContent_MakeAvailable(cuda_timer)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
@@ -148,7 +148,7 @@ target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
 ### Option C: installed package
 
 ```cmake
-find_package(cuda_timer 1.2.1 REQUIRED)
+find_package(cuda_timer 1.2.2 REQUIRED)
 target_link_libraries(my_app PRIVATE cuda_timer::cuda_timer)
 ```
 

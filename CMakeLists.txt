@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 
 project(cuda_timer
     LANGUAGES CUDA CXX
-    VERSION 1.2.1
+    VERSION 1.2.2
     DESCRIPTION "Header-only CUDA timing/profiling library for GPU kernels"
     HOMEPAGE_URL "https://github.com/MardokHPC/cuda-timer"
 )
